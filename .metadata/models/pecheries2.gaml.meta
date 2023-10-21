@@ -1,0 +1,9 @@
+#
+#Mon Sep 19 05:48:11 CEST 2016
+operators=-~as~envelope~rnd~triangle~circle~\=~where~.~any_location_in~first~point
+plugins=msi.gama.core
+statements=aspect~draw~reflex~do~arg~init~create~if~else~set~output~display~display_population~chart~data
+skills=reflex~moving
+constants=brown~cyan
+types=string~list~int~unknown~point~agent~rgb~float~date~file~geometry~container~bool
+actions=error~write~tell~die~debug~_step_~_init_~pause~halt~move~goto~follow~wander
