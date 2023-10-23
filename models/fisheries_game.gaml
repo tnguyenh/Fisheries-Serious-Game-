@@ -11,16 +11,18 @@ global {
 	int nb_trawlers <- 5;// parameter: 'Nombre de Trawlers:' category: 'Vessels';
 	int nb_sardine <- 100;// parameter: 'Densite de Sardine:' category: 'Fish';
 	float price <- 5.0;
-	int end_date <- 2000;
+	int end_date <- 12001;
 	
 	string output_file;
 	string output_path <- "../output/";
+	string game_name <- "Enter your name";
+	string objective <- "Maximize capture" among: ["Maximize capture","Maximize capital"];
 	
 	string vision <- "heatmap"; 
 	bool show_trails <- false; 	
 	bool pov <- true;
-	bool variable_price;
-	int trail_length;
+	bool variable_price <- false;
+	int trail_length <- 10;
 	int sliding_window <- 100;
 	font my_font <- font("Helvetica", 16 , #plain);
 	//file shape_file_grass <- file("../includes/gis/gridsngreen.shp");
@@ -32,25 +34,27 @@ global {
 	list<rgb> palette <- brewer_colors (color_palette_name);
 	rgb sea_color <- rgb(44, 130, 201,0.95);
 	rgb shallow_color <- rgb(44, 130, 201,0.85);
+	rgb fish_stock_color <-  rgb(97,205,114);
+	rgb capture_color <- rgb(52,152,219);
+	rgb profit_color <- rgb(243,157,49);
+	rgb maintenance_color <- rgb(102,57,43);
+	rgb score_color <- rgb(241,196,48);
 	rgb trail_color <- #grey;
 	int nb_last_positions <- 100;
 	float capture <- 0.0;
-	list<float> capture_sliding_mean <-[];
+	list<float> capture_movmean <-[];
+	list<float> net_profit_movmean <-[];
 	float total_capture <- 0.0;
 	string score <- "0";
 	float income <-0.0;
 	float fish_stock;
 	float radius <- 0.6;
+	float capital <- 100.0;
+	float fleet_maintenance_cost <- 0.0;
+	float net_profit <- 0.0;
 
 	list<provinces> sea_provinces <- [];
-	
-//	list<float> stock_history;
-//	list<float> yield_history;
-//	list<float> revenue_history;
-//	list<float> trawler_history;
-	
-
-	
+		
 	
 	geometry shallow_waters;
 	geometry sea;
@@ -117,7 +121,7 @@ global {
 		
 		create sardine number: 200 {//80
 			location <- any_location_in(sea);
-			stock <- rnd(200.0);//50
+			stock <- rnd(100.0);//50
 		}
 
 		ask cell{
@@ -135,7 +139,7 @@ global {
 	}
 	
 	reflex save_data when: cycle < end_date{
-		save [fish_stock, capture, income, nb_trawlers] format: csv rewrite: false to: output_file;
+		save [nb_trawlers, fish_stock, capture, income, price, fleet_maintenance_cost, capital, net_profit] format: csv rewrite: false to: output_file;
 	}
 	
 	reflex endSim when: (cycle=end_date) {
@@ -146,12 +150,16 @@ global {
 	
 
 	reflex update{
-		capture_sliding_mean <- last(sliding_window,capture_sliding_mean+capture);
+		fish_stock <- sum(sardine collect(each.stock));
+		capture_movmean <- last(sliding_window,	capture_movmean+capture);
 		total_capture <- total_capture + capture;
 		score <- compute_score(total_capture);
-		income <- income+sum((trawler+seiner) collect(each.revenue));
+		income <- sum((trawler+seiner) collect(each.sales_income));
+		fleet_maintenance_cost <- sum((trawler+seiner) collect(each.maintenance_cost));
+		net_profit <- income - fleet_maintenance_cost;
+		net_profit_movmean <- last(sliding_window,	net_profit_movmean+net_profit);
+		capital <- capital + net_profit;
 		
-		fish_stock <- sum(sardine collect(each.stock));
 		
 		capture <- 0.0;	
 		if length(trawler) < nb_trawlers{
@@ -169,12 +177,13 @@ global {
 		}else{
 			dir <- folder(output_path);
 		}
-	//	list<string> file_list <- list<string>(dir.contents) where(copy_between(each,length(each)-4,length(each))=".csv");
-	//	if empty(file_list){
-		return output_path+"ouput_"+rnd(100000000)+rnd(100000000)+".csv";
-	//	}else{
-	//		return output_path+first(file_list);
-	//	}
+		if output_path = '../output/refs/'{
+			return output_path+"ref_"+nb_trawlers+"_trawlers_"+rnd(100000000)+".csv";
+		}else{
+			string nm <- game_name="Enter your name"?"Anonymous":game_name;
+			string obj <- objective = "Maximize capture"?"c":"p";
+			return output_path+"ouput_"+nm+"_"+obj+"-"+rnd(100000000)+rnd(100000000)+".csv";	
+		}
 	}
 	
 	string compute_score(float a){
@@ -204,7 +213,7 @@ global {
 }
 
 
-grid cell width: 20 height: 20 neighbors: 8{
+grid cell width: 15 height: 15 neighbors: 8{
 	float carrying_capacity <- 200.0;//50.0;
 	float smoothed_population <- 0.0;
 	float population -> sum((sardine overlapping self) collect each.stock);
@@ -301,7 +310,7 @@ species boat skills: [moving]{
 	list<point> last_positions;
 	int dash <- 4;
 	float maintenance_cost;
-	float revenue;
+	float sales_income;
 	
 	init{
 		location <- any_location_in(union(port collect(each.shape)));			homeport <- first(port overlapping self);
@@ -332,7 +341,7 @@ species boat skills: [moving]{
 				ask s {do die;}
 			}
 		}
-		revenue <- price*yield-maintenance_cost;
+		sales_income <- price*yield;
 	}
 	
 	aspect default {
@@ -393,15 +402,16 @@ species sonar{
 
 
 
-experiment fisheries type: gui {
-	user_command "Add trawler" category: "Vessels" color:#green {nb_trawlers <- nb_trawlers+1;}
-	user_command "Remove trawler" category: "Vessels" color:#red {nb_trawlers <- nb_trawlers-1;}
+experiment fisheries type: gui autorun: false {
+	parameter name: 'User name' var: game_name  category: 'Game' on_change: {if cycle = 0 {output_file <- world.get_output_file();}do update_outputs();};
+	parameter name: 'Objective:' var: objective category: 'Game' on_change: {do update_outputs();};
+	user_command "Buy trawler     (-1000 \u01e4)" category: "Game" color: fish_stock_color {nb_trawlers <- nb_trawlers+1;capital <- capital-1000;}
+	user_command "Sell trawler      (+600 \u01e4)" category: "Game" color: rgb(231,76,60) {nb_trawlers <- nb_trawlers-1; capital <- capital+600;}
 	parameter name: "Point of view" var: vision init: "sonar" category: 'display' among: ['heatmap','sonar','fade','stock'] on_change: {do update_outputs();};
 	parameter name: 'Show trails' var: show_trails  category: 'display';
 	parameter name: 'Trails length' var: trail_length init: 10 category: 'display';
 	parameter name: 'Variable price' var: variable_price init: false read_only: true category: 'display';
 	output {
-//		layout #split tabs: true;
 		layout horizontal([0::140,vertical([1::100,2::100])::100]) tabs: true;
 		display 'Provinces' type: 3d background: #black toolbar: false{
 			grid cell;// border: #black;
@@ -412,27 +422,36 @@ experiment fisheries type: gui {
 	//		species legend;
 			species sonar;
 			species port;
+			
+
 			overlay position: { world.shape.width*0.6, world.shape.height*1.05} size: { 0.42,0.25} background: #black transparency: 0.2 border: #black rounded: true
    //			overlay position: {0.5,0.99} size: {0.5,0.2} background: #black transparency: 0.2 border: #black rounded: true
             {
-	            draw string("Score: "+score) at: {0.4,0.5} color: #white font: font("SansSerif", 18, #bold);
-	            draw string("Revenue: "+compute_score(income))+" \u01e4" at: {0.4,1.0} color: #white font: font("SansSerif", 18, #bold);
-	            draw string("Trawlers: "+nb_trawlers) at: {0.4,1.5} color: #white font: font("SansSerif", 18, #bold); 
-	            draw string("Seiners: "+nb_seiners) at: {0.4,2.0} color: #white font: font("SansSerif", 18, #bold); 
-	            
-	            
-	            
+            	if cycle = 0 and game_name = "Enter your name"{
+            		draw string("Enter your name")at: {0.4,0.5} color: #white font: font("SansSerif", 18, #bold);
+            	}else{
+            		draw string("Capture: "+score) at: {0.4,0.5} color: objective="Maximize capture"?score_color:#white font: font("SansSerif", 18, #bold);
+	            	draw string("Capital: "+compute_score(capital))+" \u01e4" at: {0.4,1.0} color: objective="Maximize capture"?#white:score_color font: font("SansSerif", 18, #bold);
+	            	draw string("Trawlers: "+nb_trawlers) at: {0.4,1.5} color: #white font: font("SansSerif", 18, #bold); 		
+            	}
             }		
 		}
 	
-		display stock refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
-			chart name: 'Fish stock' type: series background: rgb(47,47,47) color: #white  {
-				data legend: 'Fish stock' value: sum(sardine collect(each.stock)) style: spline color: rgb(52,152,219) marker: false;
-			}
-		}
+//		display stock refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
+//			chart name: 'Fish stock' type: series background: rgb(47,47,47) color: #white  {
+//				data legend: 'Fish stock' value: sum(sardine collect(each.stock)) style: spline color: fish_stock_color thickness: 2 marker: false;
+//			}
+//		}
 		display  capture refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
 			chart name: 'Daily capture' type: series background: rgb(47,47,47) color: #white  {
-				data legend: 'Average capture' value: mean(capture_sliding_mean) style: spline color: rgb(143,86,18) marker: false;
+				data legend: 'Capture (smoothed)' value: mean(capture_movmean) style: spline color: capture_color thickness: 2 marker: false;
+			}
+		}
+		display  "net income" refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
+			chart name: 'Net income' type: series background: rgb(47,47,47) color: #white  {
+		//		data legend: 'Net income (smoothed)' value: mean(net_profit_movmean) style: area fill: true color: profit_color thickness: 2 marker: false;
+				data legend: 'Net income (smoothed)' value: mean(net_profit_movmean) style: spline fill: true color: profit_color thickness: 2 marker: false;
+				data legend: '' value: 0 style: line line_visible: true color: rgb(profit_color,0.2) thickness: 1 marker: false marker_size: 0.1;			
 			}
 		}		
 //		display  total_capture refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
@@ -446,8 +465,8 @@ experiment fisheries type: gui {
 
 
 experiment "fisheries with price" type: gui {
-	user_command "Add trawler" category: "Vessels" color:#green {nb_trawlers <- nb_trawlers+1;}
-	user_command "Remove trawler" category: "Vessels" color:#red {nb_trawlers <- nb_trawlers-1;}
+	user_command "Buy trawler a modifier  (-1000 \u01e4)" category: "Vessels" color:#green {nb_trawlers <- nb_trawlers+1;}
+	user_command "Sell trawler  (+300 \u01e4)" category: "Vessels" color:#red {nb_trawlers <- nb_trawlers-1;}
 	parameter name: "Point of view" var: vision init: "sonar" category: 'display' among: ['heatmap','sonar','fade','stock'] on_change: {do update_outputs();};
 	parameter name: 'Show trails' var: show_trails  category: 'display';
 	parameter name: 'Trails length' var: trail_length init: 10 category: 'display';
@@ -481,7 +500,7 @@ experiment "fisheries with price" type: gui {
 		}
 		display  capture refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
 			chart name: 'Daily capture' type: series background: rgb(47,47,47) color: #white  {
-				data legend: 'Average capture' value: mean(capture_sliding_mean) style: spline color: rgb(143,86,18) marker: false;
+				data legend: 'Average capture' value: mean(capture_movmean) style: spline color: rgb(143,86,18) marker: false;
 				data legend: 'Demand' value: demand(price) style: spline color: #red marker: false;
 			}
 		}		
@@ -492,3 +511,12 @@ experiment "fisheries with price" type: gui {
 //		}
 	}
 }
+
+
+
+
+
+//experiment make_reference  type: batch until: (cycle > 10000) {
+//	parameter name: 'output path' var: output_path init: '../output/refs/' among: ['../output/refs/'];
+//	parameter name: 'Number of trawlers' var: nb_trawlers min: 0 max: 40 step: 2;
+//} 
