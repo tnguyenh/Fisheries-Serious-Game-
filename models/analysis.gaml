@@ -329,7 +329,7 @@ experiment "Reference scenarios" type: gui autorun: false{
 	
 
 	parameter name: "Scenario" var: current_scenario_id category: 'display' among: scn_list on_change: {cs<-world.current_scenario();do update_outputs();};
-	parameter name: "Maintenance cost" var: mc category: 'display' min: 0.0 max:40.0 step: 0.5 on_change: {ask world{do compute_scat_maintenance;}do update_outputs();};
+	parameter name: "Maintenance cost" var: mc category: 'display' min: 0.0 max:5.0 step: 0.1 on_change: {ask world{do compute_scat_maintenance;}do update_outputs();};
 	output {
 //		layout #split tabs: true;
 		layout horizontal([vertical([0::100,1::100])::100,vertical([2::100,3::100])::100]) tabs: true;

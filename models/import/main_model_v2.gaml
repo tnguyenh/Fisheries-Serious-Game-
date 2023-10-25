@@ -537,7 +537,7 @@ species trawler parent: boat parallel: false{
 	float speed <- 0.1;
 	float amplitude <- 10.0;
 	geometry boundaries <- sea;
-	float maintenance_cost <- 0.75;
+	float maintenance_cost <- 2.0;
 }
 
 species legend{
