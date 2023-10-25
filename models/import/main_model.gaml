@@ -6,18 +6,21 @@
 
 model fisheries
 
+import "parameters.gaml"
+
 global {
 	int nb_seiners <- 0;// parameter: 'Nombre de Seiners:' category: 'Vessels';
 	int nb_trawlers <- 5;// parameter: 'Nombre de Trawlers:' category: 'Vessels';
 	int nb_sardine <- 100;// parameter: 'Densite de Sardine:' category: 'Fish';
 	float price <- 1.0;
 	int end_date <- 10000;
+	int charts_update_interval <- 20;
 	int no_buy_duration <- 3000;
 	int my_font_size <- 18;
 	bool is_benchmark <- false;
 	
 	string output_file;
-	string output_path <- "../output/";
+	string output_path <- "../../output/";
 	string game_name <- "Enter your name";
 	string objective <- "Maximize capture" among: ["Maximize capture","Maximize capital"];
 	
@@ -29,20 +32,9 @@ global {
 	int sliding_window <- 500;
 	int profit_sliding_window <- 500;
 	font my_font <- font("Helvetica", 16 , #plain);
-	file shape_file_provinces <- file('../includes/maroc_2012.shp');
+	file shape_file_provinces <- file('../../includes/maroc_2012.shp');
 	
-	string color_palette_name <- "OrRd";//"OrRd";//"RdBu";
-	list<rgb> palette <- brewer_colors (color_palette_name);
-	rgb sea_color <- rgb(44, 130, 201,0.95);
-	rgb shallow_color <- rgb(44, 130, 201,0.85);
-	rgb fish_stock_color <-  rgb(97,205,114);
-	rgb capture_color <- rgb(52,152,219);
-	rgb profit_color <- rgb(243,157,49);
-	rgb maintenance_color <- rgb(102,57,43);
-	rgb score_color <- rgb(241,196,48);
-	rgb sardine_color <- rgb(30, 81, 123);
-	rgb trail_color <- #grey;
-	rgb trawler_color <- rgb(149,165,166);
+	
 	int nb_last_positions <- 100;
 	float capture <- 0.0;
 	list<float> capture_movmean <-[];
@@ -65,12 +57,14 @@ global {
 	list<int> xaxis;
 	float dtime;
 	
+	int countdown <- scn_nb_points;
+	
 	string output_string <- "nb_trawlers,fish_stock,capture,income,price,fleet_maintenance_cost,capital,net_profit\n";
 		
 	
 	geometry shallow_waters;
 	geometry sea; // some grid cells have been removed to avoid some fish being stuck
-	geometry sea_for_boat_access; // same than before, but the cells that have been removed and which contain ports are put back
+	//geometry sea_for_boat_access; // same than before, but the cells that have been removed and which contain ports are put back
 		
 	geometry shape <- envelope(shape_file_provinces);
 
@@ -118,11 +112,16 @@ global {
 		sea_provinces <- provinces where (each.type = 'sea' or each.type = 'shallow waters');
 
 		sea <- union(sea_provinces collect(each.shape));
-		sea_for_boat_access <- sea - cell grid_at {6,0}- cell grid_at {3,7}- cell grid_at {0,9}
-					- cell grid_at {1,9} - cell grid_at {4,3};
-		sea <- sea - cell grid_at {6,0}- cell grid_at {3,6}- cell grid_at {3,7}- cell grid_at {0,9}
-					- cell grid_at {1,9} - cell grid_at {4,3}- cell grid_at {3,5} - cell grid_at {0,8}
-					- cell grid_at {1,8} - cell grid_at {2,8}; // removing smallest grid cells, where fish can be stuck
+		sea <- sea - cell grid_at {6,0}- cell grid_at {3,7}- cell grid_at {0,9}
+					- cell grid_at {1,9} - cell grid_at {4,3} - cell grid_at {0,8}
+					- cell grid_at {1,8} - cell grid_at {2,8}
+					- cell grid_at {5,0} - cell grid_at {5,1} - cell grid_at {5,2}
+					- cell grid_at {4,0} - cell grid_at {4,1} -  cell grid_at {6,0}
+					- cell grid_at {3,6} - cell grid_at {3,5}- cell grid_at {4,2};
+		
+//		 sea - cell grid_at {6,0}- cell grid_at {3,6}- cell grid_at {3,7}- cell grid_at {0,9}
+//					- cell grid_at {1,9} - cell grid_at {4,3}- cell grid_at {3,5} - cell grid_at {0,8}
+//					- cell grid_at {1,8} - cell grid_at {2,8}; // removing smallest grid cells, where fish can be stuck
 		
 		
 		
@@ -144,9 +143,9 @@ global {
 		create seiner number: nb_seiners;
 		create trawler number: nb_trawlers;
 		
-		create sardine number: 200 {//80
+		create sardine number: 150 {//80
 			location <- any_location_in(sea);
-			stock <- rnd(100.0);//50
+			stock <- rnd(80.0);//50
 		}
 
 		ask cell{
@@ -163,27 +162,8 @@ global {
 		create legend;
 	}
 	
-	reflex save_data when: cycle < end_date{
-		output_string <- output_string + ""+nb_trawlers+","+fish_stock+","+capture+","+income+","
-				+price+","+fleet_maintenance_cost+","+capital+","+net_profit+"\n";
-	}
 	
-	reflex endSim when: (cycle=end_date) {
-		write "End of the simulation. Results:";
-		save output_string format: txt rewrite: true to: output_file;
-		write "Total capture: "+trunc(total_capture,2)+" Tons of sardines.";
-		write "Capital: "+trunc(capital,2)+" \u01e4.";
-		do pause;
-	}
-	
-	
-	reflex benchmark when: mod(cycle,1000)=0 and is_benchmark{
-		float new_d <- machine_time;
-		if cycle > 0{
-			write new_d - dtime;
-		}
-		dtime <- new_d;
-	}
+
 
 	reflex update{
 		capture <- sum((trawler+seiner) collect(each.capture));
@@ -196,16 +176,20 @@ global {
 		net_profit_movmean <- last(profit_sliding_window,	net_profit_movmean+net_profit);
 		capital <- capital + net_profit;
 		
-		capture_history << mean(capture_movmean);
-		net_profit_history << mean(net_profit_movmean);
-		trawler_history << nb_trawlers;
+		if mod(cycle,charts_update_interval)=0{
+			capture_history << mean(capture_movmean);
+			net_profit_history << mean(net_profit_movmean);
+			trawler_history << nb_trawlers;
+			xaxis <- xaxis + (last(xaxis)+charts_update_interval);
+			xaxis <- last(length(xaxis)-1,xaxis);
+		}
+
 		
 		int npoints <- 256;
 		int nvals <- length(capture_history);
 		int j;
 		
-		xaxis <- xaxis + (last(xaxis)+1);
-		xaxis <- last(length(xaxis)-1,xaxis);
+		
 		
 		xaxis <- [];
 		capture_chart <- [];
@@ -268,10 +252,39 @@ global {
 		return A-d*p;
 	}
 	
-//	reflex stop_simulation when: time = 1000 {
-//		do action: halt ;
-//	}	
+	reflex benchmark when: mod(cycle,1000)=0 and is_benchmark{
+		float new_d <- machine_time;
+		if cycle > 0{
+			write "Cycle "+cycle+": time elapsed "+(new_d - dtime)/1000+"s. Fish stock:"+fish_stock;
+		}
+		dtime <- new_d;
+	}
 		
+	reflex prepare_data_for_saving when: cycle < end_date{
+		output_string <- output_string + ""+nb_trawlers+","+fish_stock+","+capture+","+income+","
+				+price+","+fleet_maintenance_cost+","+capital+","+net_profit+"\n";
+	}
+		
+	reflex save_data when: (cycle=end_date) {
+		write "End of the simulation. Results:";
+		save output_string format: txt rewrite: true to: output_file;
+		write "Total capture: "+trunc(total_capture,2)+" Tons of sardines.";
+		write "Capital: "+trunc(capital,2)+" \u01e4.";
+	}
+	
+	reflex save_data_when_fish_depleted when: fish_stock <= 0{	
+		if countdown=0{
+			write "End of the simulation. Results:";
+			save output_string format: txt rewrite: true to: output_file;
+			write "Total capture: "+trunc(total_capture,2)+" Tons of sardines.";
+			write "Capital: "+trunc(capital,2)+" \u01e4.";
+		}
+		countdown <- countdown - 1;
+	}
+	
+	reflex endSim when: (cycle>end_date+1) {
+		do pause;
+	}
 }
 
 
@@ -313,12 +326,11 @@ species port{
 	
 	aspect default {
 		draw circle(r) color: #white at: location;
-	//	draw sea_for_boat_access color: rgb(#green,0.15);
+		//draw sea color: rgb(#green,0.15);
 	}
 }
 	
 species sardine skills: [moving] parallel: true{
-	//rgb color <- rgb(30, 81, 123,0.05);
 	rgb color <- sardine_color;
 	float stock <- 50.0;
 	cell current_cell;
@@ -340,7 +352,7 @@ species sardine skills: [moving] parallel: true{
 	}
 
 	reflex move {
-		do wander bounds: sea speed: 0.01 amplitude: 90.0;
+		do wander bounds: sea speed: 0.018 amplitude: 90.0;
 	}
 
 		
@@ -380,6 +392,8 @@ species boat skills: [moving] parallel: false{
 	float sales_income;
 	float capture;
 	sardine s;
+	bool init <- true;
+	point target;
 	
 	init{
 		location <- any_location_in(union(port collect(each.shape)));			homeport <- first(port overlapping self);
@@ -388,10 +402,35 @@ species boat skills: [moving] parallel: false{
 		}else{
 			heading <- 0.0;
 		}home <- one_of (provinces where (each.type = 'coast'));
+		target <- location -{0.4,0.4};
+	}
+	
+	reflex go_to_sea when: init{
+		do goto target: target;
+		if self distance_to target < 0.01{
+			if sea overlaps self.location {
+				init <- false;
+				s <- one_of(sardine);
+			} else{
+				target <- location -{rnd(0.1),rnd(0.05)};
+			}
+			
+		}
 	}
 		
-	reflex move {
-		do wander bounds: boundaries speed: speed amplitude: amplitude;
+	reflex move when: !init {
+		// closest_to self;
+		if s!=nil and !dead(s){
+			do goto target: s speed: 0.018 on: sea;
+		}else{
+			do wander bounds: boundaries speed: speed amplitude: amplitude;
+			float search_radius <-3*radius;
+			s <- one_of(sardine at_distance search_radius);
+			if s=nil{
+				s <- sardine closest_to self;
+			}
+		}	
+
 		last_positions <- last_positions+location;
 		if (length(last_positions) > trail_length*2*dash) and (mod(length(last_positions),2*dash)=0) {
 			last_positions <- last(trail_length*2*dash,last_positions);
@@ -400,13 +439,13 @@ species boat skills: [moving] parallel: false{
 	
 	reflex fishing{
 		capture <- 0.0;
-		s <- sardine at_distance (1.5*radius) closest_to self;
+		//s <- sardine at_distance (1.5*radius) closest_to self;
 		float yield <- 0.0;
-		if s != nil{
+		if s != nil and !dead(s) and s distance_to self < radius{
 			yield <- min(effort,s.stock);
 			capture <- capture + yield;
 			s.stock <- s.stock - effort;
-			if s.stock < 0{
+			if !dead(s) and s.stock < 0{
 				ask s {do die;}
 			}
 		}
@@ -419,12 +458,16 @@ species boat skills: [moving] parallel: false{
 				draw polyline(copy_between(last_positions,i,i+dash)) color: trail_color;
 			}
 		}
+		if s distance_to self < radius{
 		point line_vec <- (s.location-location)/8;
-		int imax <- norm(line_vec)=0?0:min(6,floor(radius/norm(line_vec)));
-		loop i from: 0 to: imax step: 2{
+		//int imax <- norm(line_vec)=0?0:min(6,floor(radius/norm(line_vec)));
+		loop i from: 0 to: 6 step: 2{
 			draw line([location+line_vec*i, location+line_vec*(i+1)]) color: sardine_color;
 		}
+		}
+		
 		draw circle(0.04) color: color ;
+		//draw circle(0.04) color: #yellow at: target ;
 	}
 }
 
@@ -440,11 +483,12 @@ species seiner parent: boat parallel: false{
 }
 
 species trawler parent: boat parallel: false{
-	rgb color <- rgb(211, 84, 0);
-	float effort <- 3.0;
-	float speed <- 0.04;
+	rgb color <- rnd_color(255);// rgb(211, 84, 0);
+//	float effort <- 1.6;
+	float effort <- 1.2;
+	float speed <- 0.08;
 	float amplitude <- 10.0;
-	geometry boundaries <- sea_for_boat_access;
+	geometry boundaries <- sea;
 	float maintenance_cost <- 0.75;
 }
 
@@ -467,7 +511,6 @@ species sonar{
 			}
 				//if species(self)=trawler{
 			draw inter(g,union(sea_provinces)) color: rgb(205,205,255,20);
-			//draw world.shape color:#green;
 		}
 	}
 }
@@ -476,66 +519,66 @@ species sonar{
 
 
 
-experiment fisheries type: gui autorun: false {
-	parameter name: 'User name' var: game_name  category: 'Game' on_change: {if cycle = 0 {output_file <- world.get_output_file();}do update_outputs();};
-	parameter name: 'Objective:' var: objective category: 'Game' on_change: {do update_outputs();};
-	
-	text  message: "Buy and sell ships to get the highest score at the end of the simulation ("+
-					end_date+" steps)." category: Game;
-	text  message:"After "+(end_date-no_buy_duration)+" steps, you cannot buy or sell boats." category: Game;
-	user_command "Buy ship     (-1000 \u01e4)" category: "Game" color: fish_stock_color when: (cycle<end_date-no_buy_duration) {if capital>1000 {nb_trawlers <- nb_trawlers+1;capital <- capital-1000;}}
-	user_command "Sell ship      (+600 \u01e4)" category: "Game" color: rgb(231,76,60) when: (cycle<end_date-no_buy_duration){if nb_trawlers > 0 {nb_trawlers <- nb_trawlers-1; capital <- capital+600;}}
-	parameter name: "Font size" var: my_font_size min: 6 max: 26 on_change: {do update_outputs();} category: 'Display';
-//	parameter name: "Point of view" var: vision init: "sonar" category: 'Display' among: ['heatmap','sonar','fade','stock'] on_change: {do update_outputs();};
-	parameter name: 'Show trails' var: show_trails  category: 'Display';
-//	parameter name: 'Trails length' var: trail_length init: 10 category: 'Display';
-	
-	float overlay_rel_width <- 0.62;
-	float overlay_rel_height <- 0.25;
-		
-	output {
-		layout horizontal([0::140,vertical([1::100,2::100])::100]) tabs: true;
-		display 'Provinces' type: 3d background: rgb(47,47,47)  toolbar: false refresh: every(1#cycle){
-		//	grid cell border: #black;
-			species provinces aspect: base ;
-			species seiner;
-			species trawler;
-			species sardine aspect: base ;
-			species sonar;
-			species port;
-			
-			overlay position: { world.shape.width*0.4, world.shape.height*1.05} size: {overlay_rel_width,overlay_rel_height} background: rgb(44,62,80) transparency: 0.2 border: #black rounded: true
-            {
-            	float overlay_width <- world.shape.width*overlay_rel_width;
-    			float overlay_height <- world.shape.height*overlay_rel_height;
-            	if cycle = 0{
-            		if game_name = "Enter your name"{
-            			draw "Enter your name\n(on left panel)" anchor: #center at: {overlay_width/2,overlay_height/3} color: #white font: font("SansSerif", 2*my_font_size, #bold);
-            		}else{
-            			draw "Welcome "+game_name anchor: #center at: {overlay_width/2,overlay_height*0.3} color: #white font: font("SansSerif", 1.5*my_font_size, #bold);
-            			draw "Your objective: "+objective anchor: #center at: {overlay_width/2,overlay_height*0.7} color: #white font: font("SansSerif", 1.5*my_font_size, #bold);
-            		}
-           		}else{
-            		draw "Capture: "+compute_score(total_capture)+"Tons (income: "+trunc(price*capture,1)+" per day)" 
-            			at: {0.05*overlay_width,0.2*overlay_height} anchor: #left_center color: objective="Maximize capture"?score_color:#white font: font("SansSerif", my_font_size, #bold);
-	            	draw "Capital: "+compute_score(capital)+"\u01e4" at: {0.05*overlay_width,0.5*overlay_height} anchor: #left_center color: objective="Maximize capture"?#white:score_color font: font("SansSerif", my_font_size, #bold);
-	            	draw "Ships: "+nb_trawlers+" (cost: "+fleet_maintenance_cost+" \u01e4 per day)" 
-	            		at: {0.05*overlay_width,0.8*overlay_height} anchor: #left_center color: cycle<end_date-no_buy_duration?#white:rgb(30,30,30) font: font("SansSerif", my_font_size, #bold); 		
-            	}
-            }		
-		}
-		display  Capture refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
-			chart name: 'Daily capture' type: series x_serie: xaxis background: rgb(47,47,47) color: #white title_font:"SansSerif" {
-				data legend: 'Capture' value: capture_chart style: area color: rgb(capture_color,0.7) thickness: 2 marker: false;
-			}
-		}
-		display  "Fishery results" refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
-			chart name: 'Net profit, fleet size' type: series x_serie: xaxis background: rgb(47,47,47) color: #white title_font:"SansSerif" {
-				data legend: 'Net profit' value: net_profit_chart style: area fill: true color: rgb(profit_color,0.7) thickness: 2 marker: false;
-				data legend: 'Ships' value: trawler_chart style: line color: trawler_color line_visible: false
-						 marker: true marker_size: 0.1;
-			}
-		}		
-	}
-}
+//experiment fisheries type: gui autorun: false {
+//	parameter name: 'User name' var: game_name  category: 'Game' on_change: {if cycle = 0 {output_file <- world.get_output_file();}do update_outputs();};
+//	parameter name: 'Objective:' var: objective category: 'Game' on_change: {do update_outputs();};
+//	
+//	text  message: "Buy and sell ships to get the highest score at the end of the simulation ("+
+//					end_date+" steps)." category: Game;
+//	text  message:"After "+(end_date-no_buy_duration)+" steps, you cannot buy or sell boats." category: Game;
+//	user_command "Buy ship     (-1000 \u01e4)" category: "Game" color: fish_stock_color when: (cycle<end_date-no_buy_duration) {if capital>1000 {nb_trawlers <- nb_trawlers+1;capital <- capital-1000;}}
+//	user_command "Sell ship      (+600 \u01e4)" category: "Game" color: rgb(231,76,60) when: (cycle<end_date-no_buy_duration){if nb_trawlers > 0 {nb_trawlers <- nb_trawlers-1; capital <- capital+600;}}
+//	parameter name: "Font size" var: my_font_size min: 6 max: 26 on_change: {do update_outputs();} category: 'Display';
+////	parameter name: "Point of view" var: vision init: "sonar" category: 'Display' among: ['heatmap','sonar','fade','stock'] on_change: {do update_outputs();};
+//	parameter name: 'Show trails' var: show_trails  category: 'Display';
+////	parameter name: 'Trails length' var: trail_length init: 10 category: 'Display';
+//	
+//	float overlay_rel_width <- 0.62;
+//	float overlay_rel_height <- 0.25;
+//		
+//	output {
+//		layout horizontal([0::140,vertical([1::100,2::100])::100]) tabs: true;
+//		display 'Provinces' type: 3d background: rgb(47,47,47)  toolbar: false refresh: every(1#cycle){
+//		//	grid cell border: #black;
+//			species provinces aspect: base ;
+//			species seiner;
+//			species trawler;
+//			species sardine aspect: base ;
+//			species sonar;
+//			species port;
+//			
+//			overlay position: { world.shape.width*0.4, world.shape.height*1.05} size: {overlay_rel_width,overlay_rel_height} background: rgb(44,62,80) transparency: 0.2 border: #black rounded: true
+//            {
+//            	float overlay_width <- world.shape.width*overlay_rel_width;
+//    			float overlay_height <- world.shape.height*overlay_rel_height;
+//            	if cycle = 0{
+//            		if game_name = "Enter your name"{
+//            			draw "Enter your name\n(on left panel)" anchor: #center at: {overlay_width/2,overlay_height/3} color: #white font: font("SansSerif", 2*my_font_size, #bold);
+//            		}else{
+//            			draw "Welcome "+game_name anchor: #center at: {overlay_width/2,overlay_height*0.3} color: #white font: font("SansSerif", 1.5*my_font_size, #bold);
+//            			draw "Your objective: "+objective anchor: #center at: {overlay_width/2,overlay_height*0.7} color: #white font: font("SansSerif", 1.5*my_font_size, #bold);
+//            		}
+//           		}else{
+//            		draw "Capture: "+compute_score(total_capture)+"Tons (income: "+trunc(price*capture,1)+" per day)" 
+//            			at: {0.05*overlay_width,0.2*overlay_height} anchor: #left_center color: objective="Maximize capture"?score_color:#white font: font("SansSerif", my_font_size, #bold);
+//	            	draw "Capital: "+compute_score(capital)+"\u01e4" at: {0.05*overlay_width,0.5*overlay_height} anchor: #left_center color: objective="Maximize capture"?#white:score_color font: font("SansSerif", my_font_size, #bold);
+//	            	draw "Ships: "+nb_trawlers+" (cost: "+fleet_maintenance_cost+" \u01e4 per day)" 
+//	            		at: {0.05*overlay_width,0.8*overlay_height} anchor: #left_center color: cycle<end_date-no_buy_duration?#white:rgb(30,30,30) font: font("SansSerif", my_font_size, #bold); 		
+//            	}
+//            }		
+//		}
+//		display  Capture refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
+//			chart name: 'Daily capture' type: series x_serie: xaxis background: rgb(47,47,47) color: #white title_font:"SansSerif" {
+//				data legend: 'Capture' value: capture_chart style: area color: rgb(capture_color,0.7) thickness: 2 marker: false;
+//			}
+//		}
+//		display  "Fishery results" refresh: every(10#cycle) type: 2d  background: #black toolbar: false{
+//			chart name: 'Net profit, fleet size' type: series x_serie: xaxis background: rgb(47,47,47) color: #white title_font:"SansSerif" {
+//				data legend: 'Net profit' value: net_profit_chart style: area fill: true color: rgb(profit_color,0.7) thickness: 2 marker: false;
+//				data legend: 'Ships' value: trawler_chart style: line color: trawler_color line_visible: false
+//						 marker: true marker_size: 0.1;
+//			}
+//		}		
+//	}
+//}
 
