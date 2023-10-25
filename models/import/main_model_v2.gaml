@@ -477,26 +477,6 @@ species boat skills: [moving] parallel: false{
 				}
 			} 
 		}
-//		if s != nil and !dead(s) and s distance_to self < radius{
-//			yield <- min(effort,s.stock);
-//			capture <- capture + yield;
-//			s.stock <- s.stock - effort;
-//			if !dead(s) and s.stock <= 0{
-//				ask s {do die;}
-//			}
-//			if yield < effort{
-//				sardine s2 <- sardine closest_to self;
-//				if s2 != nil and !dead(s2) and s2 distance_to self < radius{
-//				float yield2 <- min(effort-yield,s2.stock);
-//				capture <- capture + yield2;
-//				s2.stock <- s2.stock - (effort-yield);
-//				yield <- yield + yield2;
-//				}
-//				if !dead(s2) and s2.stock <= 0{
-//					ask s2 {do die;}
-//				}
-//			}
-//		}
 		sales_income <- price*capture;
 	}
 	
@@ -531,7 +511,7 @@ species seiner parent: boat parallel: false{
 }
 
 species trawler parent: boat parallel: false{
-	rgb color <- rnd_color(255);// rgb(211, 84, 0);
+	rgb color <- rgb(211, 84, 0);//rnd_color(255);// 
 //	float effort <- 1.6;
 	float effort <- 14.0;
 	float speed <- 0.1;

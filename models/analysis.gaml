@@ -10,7 +10,7 @@ model analysis
 import "import/parameters.gaml"
 
 global {
-	float mc;
+	float mc <- 2.0;
 	string input_path <- "../output/";
 	list<string> sorted_input_list <- (list<string>(folder(input_path).contents) - "refs" - "old") sort_by(each);
 	list<string> game_list_by_user <- sorted_input_list collect(copy_between(first(regex_matches(each,"_.*_")),1,length(first(regex_matches(each,"_.*_")))-1));
@@ -19,6 +19,8 @@ global {
 	list<int> aux_int_series <- game_list_by_user collect (game_list_by_user index_of each);
 	list<int> int_series <- all_indexes_of(list_with(length(sorted_input_list),1),1);
 	list<string> game_list <- int_series collect(game_list_by_user[each]+" ("+(each - aux_int_series[each]+1)+")("+game_list_by_type[each]+")");
+	
+	bool show_games <- false;
 	
 	string current_game_id <-first(game_list);	
 	string indicator <- "fish stock";
@@ -54,7 +56,9 @@ global {
 	
 	list<point> scat_maintenance <-[];
 	list<point> scat_income <-[];
-
+	list<point> scat_game_c <-[];
+	list<point> scat_game_p <-[];
+	
 	game cg;
 	scenario cs;
 			
@@ -64,6 +68,7 @@ global {
 	list<float> fish_stock_score_list;
 	list<float> capture_score_list;
 	list<float> profit_score_list;
+	
 	
 	list<string> ranking;
 	
@@ -157,11 +162,27 @@ global {
 		cg <- current_game();
 		cs <- current_scenario();
 		
-		
+		do compute_games_results;
+	}
+	
+	action compute_games_results{
+		scat_game_c <- [];
+		scat_game_p <- [];
+		if show_games {
+			ask game where (each.objective="c"){
+				scat_game_c <-scat_game_c + last(scn_nb_points,self.income_movmean) collect({last(self.nb_trawlers),each});
+			}
+			ask game where (each.objective="p"){
+				scat_game_p <-scat_game_p + last(scn_nb_points,self.income_movmean) collect({last(self.nb_trawlers),each});
+			}
+		}
 	}
 	
 	action compute_scat_maintenance{
 		scat_maintenance <-[{0,0},{max_nb_trawlers,mc*max_nb_trawlers}];
+		ask scenario{
+			do update_profit;
+		}
 	}
 	
 	action sort_lists{
@@ -205,6 +226,7 @@ species game{
 	list<float> net_profit_movmean <- [];
 	list<float> income_movmean <- [];
 	list<float> maintenance <- [];
+//	list<float> price <- [];
 	float fish_stock_score;
 	float capture_score;
 	float profit_score;
@@ -244,6 +266,7 @@ species game{
 		net_profit_movmean <- movmean(net_profit);
 		income <- get_vals(data,'income');
 		income_movmean <- movmean(income);
+	//	price <- get_vals(data,'price');
 		x_list <- all_indexes_of(list_with(nb_values,1),1);
 		maintenance <- get_vals(data,'maintenance_cost');
 		fish_stock_score <- mean(last(nb_points, fish_stock));
@@ -256,6 +279,13 @@ species game{
 
 species scenario parent: game{
 	
+	action update_profit{
+		write ""+length(income_movmean)+"/"+length(nb_trawlers);
+		net_profit_movmean <- [];
+		loop i from: 0 to: length(income_movmean)-1 step:1{
+			net_profit_movmean << (income_movmean[i] - nb_trawlers[0]*mc);
+		}
+	}
 }
 
 
@@ -330,6 +360,7 @@ experiment "Reference scenarios" type: gui autorun: false{
 
 	parameter name: "Scenario" var: current_scenario_id category: 'display' among: scn_list on_change: {cs<-world.current_scenario();do update_outputs();};
 	parameter name: "Maintenance cost" var: mc category: 'display' min: 0.0 max:5.0 step: 0.1 on_change: {ask world{do compute_scat_maintenance;}do update_outputs();};
+	parameter name: "Show results" var: show_games category: 'display' init: false on_change: {ask world{do compute_games_results;}do update_outputs();};
 	output {
 //		layout #split tabs: true;
 		layout horizontal([vertical([0::100,1::100])::100,vertical([2::100,3::100])::100]) tabs: true;
@@ -352,6 +383,8 @@ experiment "Reference scenarios" type: gui autorun: false{
 			y_range: {0,scn_max_income} background: rgb(47,47,47) color: #white  {
 				data legend: 'Income'  value: scat_income  color: profit_color line_visible: false marker_shape: marker_circle marker_size: 0.1;
 				data legend: 'Maintenance cost'  value: scat_maintenance  color: maintenance_color line_visible: true  marker: false;
+				data legend: 'Income (game c)'  value: scat_game_c  color: #green line_visible: false marker_shape: marker_circle marker_size: 0.1;
+				data legend: 'Income (game p)'  value: scat_game_p  color: #red line_visible: false marker_shape: marker_circle marker_size: 0.1;
 			}
 		}	
 		display  Summary type: 2d  background: #black toolbar: false{
