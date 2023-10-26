@@ -12,6 +12,8 @@ global {
 	int nb_seiners <- 0;// parameter: 'Nombre de Seiners:' category: 'Vessels';
 	int nb_trawlers <- 5;// parameter: 'Nombre de Trawlers:' category: 'Vessels';
 	int nb_sardine <- 100;// parameter: 'Densite de Sardine:' category: 'Fish';
+	int buy_price <- 1000;
+	int sell_price <- 600;
 	float K <-10000.0;
 	float price <- 1.0;
 	int end_date <- 10000;
@@ -19,6 +21,7 @@ global {
 	int no_buy_duration <- 3000;
 	int my_font_size <- 18;
 	bool is_benchmark <- false;
+	bool is_multiplayer <- false;
 	
 	string output_file;
 	string output_path <- "../../output/";
@@ -70,12 +73,12 @@ global {
 	geometry shape <- envelope(shape_file_provinces);
 
 	init {
-		
-//		xaxis <- [];
-//		loop i from: 0 to: 500-1{
-//			xaxis << i;
+//		if !is_multiplayer{
+//			do init_sim;
 //		}
+	}
 
+	action init_sim{
 		output_file <- get_output_file();
 		
 		int current_color <-3 ;
@@ -158,9 +161,7 @@ global {
 			}
 		}
 		
-
 		create sonar;
-		create legend;
 	}
 	
 	
@@ -204,13 +205,16 @@ global {
 			xaxis << j;
 		}
 		
-		//capture <- 0.0;	
-		if length(trawler) < nb_trawlers{
-			create trawler;
+		//capture <- 0.0;
+		if !is_multiplayer{
+			if length(trawler) < nb_trawlers{
+				create trawler;
+			}
+			if length(trawler) > nb_trawlers{
+				ask one_of(trawler) {do die;}
+			}
 		}
-		if length(trawler) > nb_trawlers{
-			ask one_of(trawler) {do die;}
-		}
+		
 	}
 	
 	string get_output_file{
@@ -387,10 +391,10 @@ species sardine skills: [moving] parallel: false{
 
 
 species boat skills: [moving] parallel: false{
+	int my_company;
 	port homeport;
 	provinces home;
 	float effort;
-//	cell current_cell;
 	geometry boundaries;
 	float speed;
 	float amplitude;
@@ -407,8 +411,9 @@ species boat skills: [moving] parallel: false{
 	int delay <- rnd(100);
 	
 	init{
-		location <- any_location_in(union(port collect(each.shape)));			homeport <- first(port overlapping self);
-		if homeport.name = "casa"{
+		location <- any_location_in(union(port collect(each.shape)));			
+		homeport <- first(port overlapping self);
+		if homeport != nil and homeport.name = "casa"{
 			heading <- 80.0;
 		}else{
 			heading <- 0.0;
@@ -437,6 +442,9 @@ species boat skills: [moving] parallel: false{
 		if s!=nil and !dead(s){
 			do goto target: s.location+shift speed: 0.05 on: sea;
 		}else{
+			if !(boundaries overlaps self){
+				s <-sardine closest_to self;
+			}
 			do wander bounds: boundaries speed: 0.05 amplitude: amplitude;
 		//	s <- one_of(sardine);
 			float search_radius <-3*radius;
@@ -520,14 +528,6 @@ species trawler parent: boat parallel: false{
 	float maintenance_cost <- 2.0;
 }
 
-species legend{
-	aspect default{
-		draw "seiners: "+nb_seiners at: {world.shape.width*0.67,world.shape.height*0.88} color: #black font: my_font;
-		draw "trawlers: "+nb_trawlers at: {world.shape.width*0.67,world.shape.height*0.95} color: #black font: my_font;
-		draw square(0.5) color: #green at: {world.shape.width*0.9,world.shape.height*0.92+0.05};
-		draw square(0.5) color: #red at: {world.shape.width*0.9+0.7,world.shape.height*0.92+0.05};
-	}
-}
 
 species sonar{
 	

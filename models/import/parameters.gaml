@@ -24,5 +24,7 @@ global{
 	rgb trail_color <- #grey;
 	rgb trawler_color <- rgb(149,165,166);
 	
+	list<string> port_names <- ["casa","safi","agadir"];
+	
 }
 

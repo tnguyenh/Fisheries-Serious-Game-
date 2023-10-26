@@ -17,6 +17,10 @@ global{
 	file shape_file_provinces <- file('../includes/maroc_2012.shp');
 	int end_date <- 20000;
 	bool is_benchmark <- true;
+	
+	init{
+		do init_sim;
+	}
 }
 
 
