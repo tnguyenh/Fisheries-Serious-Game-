@@ -276,7 +276,7 @@ global {
 		
 	reflex save_data when: (cycle=end_date) {
 		write "End of the simulation. Results:";
-		save output_string format: txt rewrite: true to: output_file;
+		save output_string format: "txt" rewrite: true to: output_file;
 		write "Total capture: "+trunc(total_capture,2)+" Tons of sardines.";
 		write "Capital: "+trunc(capital,2)+" \u01e4.";
 	}
@@ -284,7 +284,7 @@ global {
 	reflex save_data_when_fish_depleted when: fish_stock <= 0{	
 		if countdown=0{
 			write "End of the simulation. Results:";
-			save output_string format: txt rewrite: true to: output_file;
+			save output_string format: "txt" rewrite: true to: output_file;
 			write "Total capture: "+trunc(total_capture,2)+" Tons of sardines.";
 			write "Capital: "+trunc(capital,2)+" \u01e4.";
 		}
@@ -486,7 +486,7 @@ species boat skills: [moving] parallel: false{
 				draw polyline(copy_between(last_positions,i,i+dash)) color: trail_color;
 			}
 		}
-		if s distance_to self < radius{
+		if s != nil and (s distance_to self) < radius{
 		point line_vec <- (s.location-location)/8;
 		//int imax <- norm(line_vec)=0?0:min(6,floor(radius/norm(line_vec)));
 		loop i from: 0 to: 6 step: 2{

@@ -21,7 +21,7 @@ global {
 	
 	string output_file;
 	string output_path <- "../../output/";
-	string game_name <- "Enter your name";
+	string game_name <- "Enter your name"; 
 	string objective <- "Maximize capture" among: ["Maximize capture","Maximize capital"];
 	
 	string vision <- "sonar"; 
@@ -267,7 +267,7 @@ global {
 		
 	reflex save_data when: (cycle=end_date) {
 		write "End of the simulation. Results:";
-		save output_string format: txt rewrite: true to: output_file;
+		save output_string format: "txt" rewrite: true to: output_file;
 		write "Total capture: "+trunc(total_capture,2)+" Tons of sardines.";
 		write "Capital: "+trunc(capital,2)+" \u01e4.";
 	}
@@ -275,7 +275,7 @@ global {
 	reflex save_data_when_fish_depleted when: fish_stock <= 0{	
 		if countdown=0{
 			write "End of the simulation. Results:";
-			save output_string format: txt rewrite: true to: output_file;
+			save output_string format: "txt" rewrite: true to: output_file;
 			write "Total capture: "+trunc(total_capture,2)+" Tons of sardines.";
 			write "Capital: "+trunc(capital,2)+" \u01e4.";
 		}
