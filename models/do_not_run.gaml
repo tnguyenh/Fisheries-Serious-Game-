@@ -7,7 +7,7 @@
 model fisheries_game_master
 
 
-import "import/main_model_v2.gaml"
+import "import/main_model.gaml"
 
 global{
 	int nb_trawlers <- 25;

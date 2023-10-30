@@ -6,7 +6,7 @@
 
 model fisheries
 
-import "import/main_model_v2.gaml"
+import "import/main_model.gaml"
 
 global{
 	string output_path <- "../output/";

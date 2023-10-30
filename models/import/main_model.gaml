@@ -12,16 +12,20 @@ global {
 	int nb_seiners <- 0;// parameter: 'Nombre de Seiners:' category: 'Vessels';
 	int nb_trawlers <- 5;// parameter: 'Nombre de Trawlers:' category: 'Vessels';
 	int nb_sardine <- 100;// parameter: 'Densite de Sardine:' category: 'Fish';
+	int buy_price <- 1000;
+	int sell_price <- 600;
+	float K <-10000.0;
 	float price <- 1.0;
 	int end_date <- 10000;
 	int charts_update_interval <- 20;
 	int no_buy_duration <- 3000;
 	int my_font_size <- 18;
 	bool is_benchmark <- false;
+	bool is_multiplayer <- false;
 	
 	string output_file;
 	string output_path <- "../../output/";
-	string game_name <- "Enter your name"; 
+	string game_name <- "Enter your name";
 	string objective <- "Maximize capture" among: ["Maximize capture","Maximize capital"];
 	
 	string vision <- "sonar"; 
@@ -69,12 +73,12 @@ global {
 	geometry shape <- envelope(shape_file_provinces);
 
 	init {
-		
-//		xaxis <- [];
-//		loop i from: 0 to: 500-1{
-//			xaxis << i;
+//		if !is_multiplayer{
+//			do init_sim;
 //		}
+	}
 
+	action init_sim{
 		output_file <- get_output_file();
 		
 		int current_color <-3 ;
@@ -157,9 +161,7 @@ global {
 			}
 		}
 		
-
 		create sonar;
-		create legend;
 	}
 	
 	
@@ -203,13 +205,16 @@ global {
 			xaxis << j;
 		}
 		
-		//capture <- 0.0;	
-		if length(trawler) < nb_trawlers{
-			create trawler;
+		//capture <- 0.0;
+		if !is_multiplayer{
+			if length(trawler) < nb_trawlers{
+				create trawler;
+			}
+			if length(trawler) > nb_trawlers{
+				ask one_of(trawler) {do die;}
+			}
 		}
-		if length(trawler) > nb_trawlers{
-			ask one_of(trawler) {do die;}
-		}
+		
 	}
 	
 	string get_output_file{
@@ -252,10 +257,18 @@ global {
 		return A-d*p;
 	}
 	
+	reflex last_sardine when: length(sardine) =1{
+		sardine s <- first(sardine);
+		if s.stock < K/100{
+			ask s {do die;}
+		}
+	}
+	
 	reflex benchmark when: mod(cycle,1000)=0 and is_benchmark{
 		float new_d <- machine_time;
 		if cycle > 0{
 			write "Cycle "+cycle+": time elapsed "+(new_d - dtime)/1000+"s. Fish stock:"+fish_stock;
+			write length(sardine);
 		}
 		dtime <- new_d;
 	}
@@ -289,7 +302,7 @@ global {
 
 
 grid cell width: 10 height: 10 neighbors: 8 parallel: true{
-	float carrying_capacity <- 200.0;//50.0;
+	//float carrying_capacity <- 200.0;//50.0;
 	float smoothed_population <- 0.0;
 	float population; 
 	bool border <- false;
@@ -306,7 +319,7 @@ grid cell width: 10 height: 10 neighbors: 8 parallel: true{
 	
 	reflex count_population_heatmap when: vision = "heatmap" and !border and at_sea{
 		smoothed_population <- (population + sum(self.neighbors collect each.population))/(1+length(self.neighbors));
-		int index <- int(255*min(1.0,(3*smoothed_population/carrying_capacity)^0.6));
+		int index <- int(255*min(1.0,(3*smoothed_population/K)^0.6));
 		color <-  rgb(255-index, 255-index, 255);
 	}
 }
@@ -330,29 +343,29 @@ species port{
 	}
 }
 	
-species sardine skills: [moving] parallel: true{
+species sardine skills: [moving] parallel: false{
 	rgb color <- sardine_color;
 	float stock <- 50.0;
 	cell current_cell;
-	float growth_rate <- 0.09;
+	float growth_rate <- 0.02;
 	float transparency;
 	
 	reflex growth{
 		current_cell <- first(cell overlapping (self.location));
 		if current_cell != nil{
-			stock <- stock + growth_rate * stock * (1 - current_cell.population/current_cell.carrying_capacity);
-			if stock > 0.85*current_cell.carrying_capacity{
+			stock <- stock + growth_rate * stock * (1 - fish_stock/K);
+			if stock > K/200 and flip(0.5*(1-length(sardine)/75)){
 				stock <- stock/2;
 				create sardine{
 					self.stock <- myself.stock;
-					self.location <- myself.location;
+					self.location <- any_location_in(inter(circle(2*radius,myself.location),sea));
 				}
 			}	
 		}
 	}
 
 	reflex move {
-		do wander bounds: sea speed: 0.018 amplitude: 90.0;
+		do wander bounds: sea speed: 0.005 amplitude: 90.0;
 	}
 
 		
@@ -378,10 +391,10 @@ species sardine skills: [moving] parallel: true{
 
 
 species boat skills: [moving] parallel: false{
+	int my_company;
 	port homeport;
 	provinces home;
 	float effort;
-//	cell current_cell;
 	geometry boundaries;
 	float speed;
 	float amplitude;
@@ -394,10 +407,13 @@ species boat skills: [moving] parallel: false{
 	sardine s;
 	bool init <- true;
 	point target;
+	point shift;
+	int delay <- rnd(100);
 	
 	init{
-		location <- any_location_in(union(port collect(each.shape)));			homeport <- first(port overlapping self);
-		if homeport.name = "casa"{
+		location <- any_location_in(union(port collect(each.shape)));			
+		homeport <- first(port overlapping self);
+		if homeport != nil and homeport.name = "casa"{
 			heading <- 80.0;
 		}else{
 			heading <- 0.0;
@@ -420,15 +436,30 @@ species boat skills: [moving] parallel: false{
 		
 	reflex move when: !init {
 		// closest_to self;
+		if mod(cycle,100)=delay{
+			shift <- {(rnd(2.0)-1)*radius,(rnd(2.0)-1)*radius};
+		}
 		if s!=nil and !dead(s){
-			do goto target: s speed: 0.018 on: sea;
+			do goto target: s.location+shift speed: 0.05 on: sea;
 		}else{
-			do wander bounds: boundaries speed: speed amplitude: amplitude;
-			float search_radius <-3*radius;
-			s <- one_of(sardine at_distance search_radius);
-			if s=nil{
-				s <- sardine closest_to self;
+			if !(boundaries overlaps self){
+				s <-sardine closest_to self;
 			}
+			do wander bounds: boundaries speed: 0.05 amplitude: amplitude;
+		//	s <- one_of(sardine);
+			float search_radius <-3*radius;
+			list<sardine> sardines <- sardine at_distance search_radius;
+			if empty(sardines){
+				s <- sardine closest_to self;
+			}else{
+				s <- sardine closest_to self;
+//				float m <- max(sardines collect each.stock);
+//				s <- one_of(sardines where (each.stock>m/2));
+			}
+//			s <- (sardine at_distance search_radius) sort_by(each.);
+//			if s=nil{
+//				s <- sardine closest_to self;
+//			}
 		}	
 
 		last_positions <- last_positions+location;
@@ -440,16 +471,21 @@ species boat skills: [moving] parallel: false{
 	reflex fishing{
 		capture <- 0.0;
 		//s <- sardine at_distance (1.5*radius) closest_to self;
-		float yield <- 0.0;
-		if s != nil and !dead(s) and s distance_to self < radius{
-			yield <- min(effort,s.stock);
-			capture <- capture + yield;
-			s.stock <- s.stock - effort;
-			if !dead(s) and s.stock < 0{
-				ask s {do die;}
-			}
+		//float yield <- 0.0;
+		float current_effort <- effort * fish_stock/20000;
+		list<sardine> sardines <- sardine at_distance (1.5*radius);
+		loop sar over: sardines {
+			if sar != nil and !dead(sar) and current_effort > 0{
+				float y <- min(current_effort,sar.stock);
+				capture <- capture + y;
+				sar.stock <- sar.stock - y;
+				current_effort <- current_effort - y;
+				if !dead(sar) and sar.stock <= 0{
+					ask sar {do die;}
+				}
+			} 
 		}
-		sales_income <- price*yield;
+		sales_income <- price*capture;
 	}
 	
 	aspect default {
@@ -458,7 +494,7 @@ species boat skills: [moving] parallel: false{
 				draw polyline(copy_between(last_positions,i,i+dash)) color: trail_color;
 			}
 		}
-		if s distance_to self < radius{
+		if s != nil and (s distance_to self) < radius{
 		point line_vec <- (s.location-location)/8;
 		//int imax <- norm(line_vec)=0?0:min(6,floor(radius/norm(line_vec)));
 		loop i from: 0 to: 6 step: 2{
@@ -474,7 +510,7 @@ species boat skills: [moving] parallel: false{
 species seiner parent: boat parallel: false{
 	rgb color <- #orange ;
 	float effort <- 0.3;
-	float speed <- 0.08;
+	float speed <- 0.1;
 	float amplitude <- 120.0;
 	geometry boundaries <- shallow_waters;
 	int dash <- 2;
@@ -483,23 +519,15 @@ species seiner parent: boat parallel: false{
 }
 
 species trawler parent: boat parallel: false{
-	rgb color <- rnd_color(255);// rgb(211, 84, 0);
+	rgb color <- rgb(211, 84, 0);//rnd_color(255);// 
 //	float effort <- 1.6;
-	float effort <- 1.2;
-	float speed <- 0.08;
+	float effort <- 14.0;
+	float speed <- 0.1;
 	float amplitude <- 10.0;
 	geometry boundaries <- sea;
-	float maintenance_cost <- 0.75;
+	float maintenance_cost <- 2.0;
 }
 
-species legend{
-	aspect default{
-		draw "seiners: "+nb_seiners at: {world.shape.width*0.67,world.shape.height*0.88} color: #black font: my_font;
-		draw "trawlers: "+nb_trawlers at: {world.shape.width*0.67,world.shape.height*0.95} color: #black font: my_font;
-		draw square(0.5) color: #green at: {world.shape.width*0.9,world.shape.height*0.92+0.05};
-		draw square(0.5) color: #red at: {world.shape.width*0.9+0.7,world.shape.height*0.92+0.05};
-	}
-}
 
 species sonar{
 	
