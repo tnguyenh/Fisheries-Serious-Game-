@@ -191,7 +191,7 @@ species aquarium{
 
 
 
-experiment fisheries type: gui  {
+experiment flaquarium type: gui  {
 	parameter name: 'Number of boats' var: nb_boats init: 1 min:0 max: 100;
 	parameter name: 'Net mesh size' var: mesh_size init: 1 min: 1 max: 6;
 
