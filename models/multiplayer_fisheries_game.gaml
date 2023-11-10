@@ -63,7 +63,6 @@ global{
 	
 	action buy_boat(int cid){
 		ask first(company where (each.id=cid)){
-			write company collect(each.id);
 			do buy_boat;
 		}
 	}
@@ -74,6 +73,15 @@ global{
 		}
 	}
 	
+//	reflex update_fleet{
+//		ask company{
+//			loop b over:to_be_sold{
+//				ask b {do die;}
+//			}
+//			to_be_sold <- [];
+//		}
+//	}
+//	
 
 	
 	reflex stats{
@@ -100,15 +108,16 @@ species company{
 	string name <- "World Co.";
 	list<boat> fleet <- [];
 	string owner <- "Elon M.";
-	float capture -> sum(fleet collect(each.capture));
+	float capture -> sum((fleet where !dead(each)) collect(each.capture));
 	list<float> capture_history <- [];
-	float income -> sum(fleet collect(each.sales_income));
+	float income -> sum((fleet where !dead(each)) collect(each.sales_income));
 	list<float> income_history <- [];
-	float maintenance_cost -> sum(fleet collect(each.maintenance_cost));
+	float maintenance_cost -> sum((fleet where !dead(each)) collect(each.maintenance_cost));
 	list<float> maintenance_history <- [];
 	float capital;
 	rgb color <- rnd_color(255);
 	port homeport;
+//	list<boat> to_be_sold;
 	
 	
 	reflex update{
@@ -134,6 +143,7 @@ species company{
 			if capital > buy_price{
 				capital <- capital - buy_price;
 				do create_boat;
+				nb_trawlers <- nb_trawlers + 1;
 			}else{
 				write "Cannot buy boats, not enough funds.";
 			}
@@ -148,12 +158,19 @@ species company{
 		trawler t <- one_of(trawler where (each.my_company=id));
 		if t!=nil{
 			capital <- capital + sell_price;
-			ask t {do die;}
+			to_be_sold << t;
 			nb_trawlers <- nb_trawlers - 1;
 		}else{
 			write "Cannot sell boats, not enough boats.";
 		}
 	}
+	
+//	reflex remove_sold_boats{
+//		loop b over:to_be_sold{
+//			ask b {do die;}
+//		}
+//		to_be_sold <- [];
+//	}
 }
 
 

@@ -60,6 +60,7 @@ global {
 	list<float> trawler_chart;
 	list<int> xaxis;
 	float dtime;
+	list<boat> to_be_sold;
 	
 	int countdown <- scn_nb_points;
 	
@@ -213,8 +214,12 @@ global {
 			if length(trawler) > nb_trawlers{
 				ask one_of(trawler) {do die;}
 			}
+		}else{
+			loop b over:to_be_sold{
+				ask b {do die;}
+			}
+			to_be_sold <- [];
 		}
-		
 	}
 	
 	string get_output_file{
@@ -229,7 +234,7 @@ global {
 		}else{
 			string nm <- (game_name="Enter your name" or game_name="")?"Anonymous":game_name;
 			string obj <- objective = "Maximize capture"?"c":"p";
-			return output_path+"ouput_"+nm+"_"+obj+"-"+replace_regex(string(#now),'[-: ]','')+rnd(100000000)+".csv";	
+			return output_path+(is_multiplayer?"multi":"")+"ouput_"+nm+"_"+obj+"-"+replace_regex(string(#now),'[-: ]','')+rnd(100000000)+".csv";	
 		}
 	}
 	
