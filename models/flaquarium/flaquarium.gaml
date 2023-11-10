@@ -21,7 +21,7 @@ global {
 	list<float> categories <-list<float>(all_indexes_of([0]+list_with(max_size,1),1));
 	list<float> capture_by_size <- list_with(6,0.0);
 	float biomass;
-	float carrying_capacity <- 1000.0;
+	float carrying_capacity <- 500.0;
 	
 	float margin <- 4.0;
 
@@ -100,12 +100,12 @@ species sardine skills:[moving] parallel: false{
 			v_heading <- -50+rnd(100.0);
 		}
 		location <- location + {0,0,0.01*speed*tan(v_heading)};
-		if location.z > h-5{
-			location <- {location.x,location.y,h-5};
-		}
-		if location.z < 5{
-			location <- {location.x,location.y,5};
-		}
+//		if location.z > h-5{
+//			location <- {location.x,location.y,h-5};
+//		}
+//		if location.z < 5{
+//			location <- {location.x,location.y,5};
+//		}
 	}
 	
 	aspect default{
