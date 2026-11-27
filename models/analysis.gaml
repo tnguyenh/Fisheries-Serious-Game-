@@ -13,8 +13,8 @@ global {
 	float mc <- 2.0;
 	string input_path <- "../output/";
 	list<string> sorted_input_list <- (list<string>(folder(input_path).contents) - "refs" - "old") sort_by(each);
-	list<string> game_list_by_user <- sorted_input_list collect(copy_between(first(regex_matches(each,"_.*_")),1,length(first(regex_matches(each,"_.*_")))-1));
-	list<string> game_list_by_type <- sorted_input_list collect(copy_between(first(regex_matches(each,"_[cp]-")),1,2));
+	list<string> game_list_by_user <- sorted_input_list collect(copy_between(string(first(regex_matches(each,"_.*_"))),1,length(first(regex_matches(each,"_.*_")))-1));
+	list<string> game_list_by_type <- sorted_input_list collect(copy_between(string(first(regex_matches(each,"_[cp]-"))),1,2));
 	list<string> users <- remove_duplicates(game_list_by_user);
 	list<int> aux_int_series <- game_list_by_user collect (game_list_by_user index_of each);
 	list<int> int_series <- all_indexes_of(list_with(length(sorted_input_list),1),1);
@@ -75,8 +75,8 @@ global {
 	/* reference scenarios */
 	string scn_input_path <- input_path+"refs/";
 	list<string> sorted_scn_list <- (list<string>(folder(scn_input_path).contents)  - "old") sort_by(each);
-	list<string> trawler_list <- sorted_scn_list collect(copy_between(first(regex_matches(each,"f_.*_t")),2,length(first(regex_matches(each,"f_.*_t")))-2));
-	list<string> id_list <- sorted_scn_list collect(copy_between(first(regex_matches(each,"s_.*csv")),2,length(first(regex_matches(each,"s_.*csv")))-4));
+	list<string> trawler_list <- sorted_scn_list collect(copy_between(string(first(regex_matches(each,"f_.*_t"))),2,length(first(regex_matches(each,"f_.*_t")))-2));
+	list<string> id_list <- sorted_scn_list collect(copy_between(string(first(regex_matches(each,"s_.*csv"))),2,length(first(regex_matches(each,"s_.*csv")))-4));
 	list<int> int_series2 <- all_indexes_of(list_with(length(sorted_scn_list),1),1);
 	list<string> scn_list <- int_series2 collect(trawler_list[each]+" ships ("+id_list[each]+")");
 
@@ -89,7 +89,7 @@ global {
 				id <- scn_list[s]; 
 				filename <- scn_input_path+sorted_scn_list[s];	
 				sliding_window <- myself.scn_sliding_window;		
-				do load_csv_file;
+				do load_csv_file();
 			}
 		}
 		
@@ -114,7 +114,7 @@ global {
 			//scat_maintenance <- scat_maintenance + {self.nb_trawlers[0],self.maintenance[0]};
 		}
 		
-		do compute_scat_maintenance;
+		do compute_scat_maintenance();
 		
 		// load games
 		
@@ -125,7 +125,7 @@ global {
 				id <- game_list[g];
 				objective <- game_list_by_type[g];
 				sliding_window <- myself.sliding_window;				
-				do load_csv_file;
+				do load_csv_file();
 			}
 		}
 		
@@ -157,15 +157,15 @@ global {
 		unsorted_profit_score_list <-game collect(each.profit_score);
 	
 		
-		do sort_lists;
+		do sort_lists();
 
 		cg <- current_game();
 		cs <- current_scenario();
 		
-		do compute_games_results;
+		do compute_games_results();
 	}
 	
-	action compute_games_results{
+	action compute_games_results(){
 		scat_game_c <- [];
 		scat_game_p <- [];
 		if show_games {
@@ -178,14 +178,14 @@ global {
 		}
 	}
 	
-	action compute_scat_maintenance{
+	action compute_scat_maintenance(){
 		scat_maintenance <-[{0,0},{max_nb_trawlers,mc*max_nb_trawlers}];
 		ask scenario{
-			do update_profit;
+			do update_profit();
 		}
 	}
 	
-	action sort_lists{
+	action sort_lists(){
 		list<float> ref_list;
 		switch indicator{
 			match "fish stock"{ref_list <- unsorted_fish_stock_score_list;}
@@ -200,11 +200,11 @@ global {
 		profit_score_list <- order_list accumulate([0,0,0,scale_profit*unsorted_profit_score_list[each],0]);
 	}
 	
-	game current_game{
+	game current_game(){
 		return first(game where (each.id = current_game_id));
 	}
 	
-	scenario current_scenario{
+	scenario current_scenario(){
 		return first(scenario where (each.id = current_scenario_id));
 	}
 	
@@ -250,7 +250,7 @@ species game{
 		return res;
 	}
 	
-	action load_csv_file{
+	action load_csv_file(){
 		file my_csv_file <- csv_file(filename,",",string, false);				
 		matrix<string> data <- matrix<string>(my_csv_file);
 		loop j from: 0 to: data.columns -1 step: 1{
@@ -279,7 +279,7 @@ species game{
 
 species scenario parent: game{
 	
-	action update_profit{
+	action update_profit(){
 		write ""+length(income_movmean)+"/"+length(nb_trawlers);
 		net_profit_movmean <- [];
 		loop i from: 0 to: length(income_movmean)-1 step:1{
@@ -300,14 +300,14 @@ experiment Analysis type: gui autorun: true{
 //	list<string> input_list <-folder(input_path).contents - "refs";
 	list<string> sorted_input_list <- (list<string>(folder(input_path).contents) - "refs" - "old") sort_by(each);
 	//list<string> sorted_input_list <- input_list sort_by(each);
-	list<string> game_list_by_user <- sorted_input_list collect(copy_between(first(regex_matches(each,"_.*_")),1,length(first(regex_matches(each,"_.*_")))-1));
-	list<string> game_list_by_type <- sorted_input_list collect(copy_between(last(regex_matches(each,"_[cp]-")),1,2));
+	list<string> game_list_by_user <- sorted_input_list collect(copy_between(string(first(regex_matches(each,"_.*_"))),1,length(first(regex_matches(each,"_.*_")))-1));
+	list<string> game_list_by_type <- sorted_input_list collect(copy_between(string(last(regex_matches(each,"_[cp]-"))),1,2));
 	list<string> users <- remove_duplicates(game_list_by_user);
 	list<int> aux_int_series <- game_list_by_user collect (game_list_by_user index_of each);
 	list<int> int_series <- all_indexes_of(list_with(length(sorted_input_list),1),1);
 	list<string> game_list <- int_series collect(game_list_by_user[each]+" ("+(each - aux_int_series[each]+1)+")("+game_list_by_type[each]+")");
-	parameter name: "Game" var: current_game_id category: 'display' among: game_list on_change: {cg<-world.current_game();do update_outputs();};
-	parameter name: "Ranking" var: indicator category: 'display' init: "fish stock" among: ["fish stock","capture","profit"] on_change: {ask world{do sort_lists;} do update_outputs();};
+	parameter "Game" var: current_game_id category: 'display' among: game_list on_change: {cg<-world.current_game();do update_outputs();};
+	parameter "Ranking" var: indicator category: 'display' init: "fish stock" among: ["fish stock","capture","profit"] on_change: {ask world{do sort_lists();} do update_outputs();};
 	output {
 //		layout #split tabs: true;
 		layout horizontal([vertical([0::100,1::100])::100,vertical([2::100,3::100])::100]) tabs: true;
@@ -352,15 +352,15 @@ experiment "Reference scenarios" type: gui autorun: false{
 	string indicator;
 	string scn_input_path <- input_path+"refs";
 	list<string> sorted_scn_list <- (list<string>(folder(scn_input_path).contents)  - "old") sort_by(each);
-	list<string> trawler_list <- sorted_scn_list collect(copy_between(first(regex_matches(each,"f_.*_t")),2,length(first(regex_matches(each,"f_.*_t")))-2));
-	list<string> id_list <- sorted_scn_list collect(copy_between(first(regex_matches(each,"s_.*csv")),2,length(first(regex_matches(each,"s_.*csv")))-4));
+	list<string> trawler_list <- sorted_scn_list collect(copy_between(string(first(regex_matches(each,"f_.*_t"))),2,length(first(regex_matches(each,"f_.*_t")))-2));
+	list<string> id_list <- sorted_scn_list collect(copy_between(string(first(regex_matches(each,"s_.*csv"))),2,length(first(regex_matches(each,"s_.*csv")))-4));
 	list<int> int_series2 <- all_indexes_of(list_with(length(sorted_scn_list),1),1);
 	list<string> scn_list <- int_series2 collect(trawler_list[each]+" ships ("+id_list[each]+")");
 	
 
 	parameter name: "Scenario" var: current_scenario_id category: 'display' among: scn_list on_change: {cs<-world.current_scenario();do update_outputs();};
-	parameter name: "Maintenance cost" var: mc category: 'display' min: 0.0 max:5.0 step: 0.1 on_change: {ask world{do compute_scat_maintenance;}do update_outputs();};
-	parameter name: "Show results" var: show_games category: 'display' init: false on_change: {ask world{do compute_games_results;}do update_outputs();};
+	parameter name: "Maintenance cost" var: mc category: 'display' min: 0.0 max:5.0 step: 0.1 on_change: {ask world{do compute_scat_maintenance();}do update_outputs();};
+	parameter name: "Show results" var: show_games category: 'display' init: false on_change: {ask world{do compute_games_results();}do update_outputs();};
 	output {
 //		layout #split tabs: true;
 		layout horizontal([vertical([0::100,1::100])::100,vertical([2::100,3::100])::100]) tabs: true;

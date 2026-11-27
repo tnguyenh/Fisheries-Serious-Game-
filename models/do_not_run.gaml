@@ -11,7 +11,7 @@ import "import/main_model.gaml"
 
 global{
 	int nb_trawlers <- 25;
-	float capital <- 100000000;
+	float capital <- 100000000.0;
 	
 	string output_path <- "../output/";
 	file shape_file_provinces <- file('../includes/maroc_2012.shp');
@@ -19,7 +19,7 @@ global{
 	bool is_benchmark <- true;
 	
 	init{
-		do init_sim;
+		do init_sim();
 	}
 }
 

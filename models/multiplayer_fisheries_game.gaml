@@ -27,12 +27,12 @@ global{
 	list<rgb> companies_color <- list_with(max_companies,rnd_color(255));
 	
 	init{
-		do init_sim;
-		do create_rnd_company;
-		do create_rnd_company;
+		do init_sim();
+		do create_rnd_company();
+		do create_rnd_company();
 	}
 	
-	action create_rnd_company{
+	action create_rnd_company(){
 		do create_company(one_of(companies_default_names - company collect(each.name)),one_of(owners_default_names - company collect(each.name)));	
 	}
 	
@@ -45,7 +45,7 @@ global{
 				owner <- owner_name;
 				homeport <- one_of(port);
 				color <- companies_color[id];
-				do create_boat;
+				do create_boat();
 				nb_companies <- nb_companies + 1;
 			}	
 		}else{
@@ -56,20 +56,20 @@ global{
 	
 	action remove_company(company c){
 		ask c.fleet{
-			do die;
+			do die();
 		}
 		c.active <- false;
 	}
 	
 	action buy_boat(int cid){
 		ask first(company where (each.id=cid)){
-			do buy_boat;
+			do buy_boat();
 		}
 	}
 	
 	action sell_boat(int cid){
 		ask first(company where (each.id=cid)){
-			do sell_boat;
+			do sell_boat();
 		}
 	}
 	
@@ -93,7 +93,7 @@ global{
 				(mean(company(i).income_history)-mean(company(i).maintenance_history));
 		}
 		if cycle= 100{
-			do create_rnd_company;
+			do create_rnd_company();
 		}
 	}
 }
@@ -127,7 +127,7 @@ species company{
 	}
 	
 	
-	action create_boat{
+	action create_boat(){
 		create trawler{
 			my_company <- myself.id;
 			color <- myself.color;
@@ -138,11 +138,11 @@ species company{
 		}
 	}
 	
-	action buy_boat {
+	action buy_boat() {
 		if active{
 			if capital > buy_price{
 				capital <- capital - buy_price;
-				do create_boat;
+				do create_boat();
 				nb_trawlers <- nb_trawlers + 1;
 			}else{
 				write "Cannot buy boats, not enough funds.";
@@ -154,7 +154,7 @@ species company{
 	}
 	
 	
-	action sell_boat{
+	action sell_boat(){
 		trawler t <- one_of(trawler where (each.my_company=id));
 		if t!=nil{
 			capital <- capital + sell_price;

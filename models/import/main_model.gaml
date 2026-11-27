@@ -23,6 +23,8 @@ global {
 	bool is_benchmark <- false;
 	bool is_multiplayer <- false;
 	
+	point v_shift <- {0,0,0.001};
+	
 	string output_file;
 	string output_path <- "../../output/";
 	string game_name <- "Enter your name";
@@ -68,7 +70,8 @@ global {
 		
 	
 	geometry shallow_waters;
-	geometry sea; // some grid cells have been removed to avoid some fish being stuck
+	geometry sea;
+	geometry accessible_sea_area; // some grid cells have been removed to avoid some fish being stuck
 	//geometry sea_for_boat_access; // same than before, but the cells that have been removed and which contain ports are put back
 		
 	geometry shape <- envelope(shape_file_provinces);
@@ -79,7 +82,7 @@ global {
 //		}
 	}
 
-	action init_sim{
+	action init_sim(){
 		output_file <- get_output_file();
 		
 		int current_color <-3 ;
@@ -116,8 +119,8 @@ global {
 		
 		sea_provinces <- provinces where (each.type = 'sea' or each.type = 'shallow waters');
 
-		sea <- union(sea_provinces collect(each.shape));
-		sea <- sea - cell grid_at {6,0}- cell grid_at {3,7}- cell grid_at {0,9}
+		sea <- union(sea_provinces);
+		accessible_sea_area <- sea - cell grid_at {6,0}- cell grid_at {3,7}- cell grid_at {0,9}
 					- cell grid_at {1,9} - cell grid_at {4,3} - cell grid_at {0,8}
 					- cell grid_at {1,8} - cell grid_at {2,8}
 					- cell grid_at {5,0} - cell grid_at {5,1} - cell grid_at {5,2}
@@ -149,15 +152,15 @@ global {
 		create trawler number: nb_trawlers;
 		
 		create sardine number: 150 {//80
-			location <- any_location_in(sea);
+			location <- any_location_in(accessible_sea_area);
 			stock <- rnd(80.0);//50
 		}
 
 		ask cell{
-			if self.shape - sea != nil{
+			if self.shape - accessible_sea_area != nil{
 				border <- true;
 			}
-			if inter(self.shape, sea) != nil{
+			if inter(self.shape, accessible_sea_area) != nil{
 				at_sea <- true;
 			}
 		}
@@ -212,17 +215,17 @@ global {
 				create trawler;
 			}
 			if length(trawler) > nb_trawlers{
-				ask one_of(trawler) {do die;}
+				ask one_of(trawler) {do die();}
 			}
 		}else{
 			loop b over:to_be_sold{
-				ask b {do die;}
+				ask b {do die();}
 			}
 			to_be_sold <- [];
 		}
 	}
 	
-	string get_output_file{
+	string get_output_file(){
 		file dir;
 		if !folder_exists(output_path){
 			dir <- new_folder(output_path);
@@ -265,12 +268,12 @@ global {
 	reflex last_sardine when: length(sardine) =1{
 		sardine s <- first(sardine);
 		if s.stock < K/100{
-			ask s {do die;}
+			ask s {do die();}
 		}
 	}
 	
 	reflex benchmark when: mod(cycle,1000)=0 and is_benchmark{
-		float new_d <- machine_time;
+		float new_d <- gama.machine_time;
 		if cycle > 0{
 			write "Cycle "+cycle+": time elapsed "+(new_d - dtime)/1000+"s. Fish stock:"+fish_stock;
 			write length(sardine);
@@ -301,7 +304,7 @@ global {
 	}
 	
 	reflex endSim when: (cycle>end_date+1) {
-		do pause;
+		do pause();
 	}
 }
 
@@ -324,8 +327,8 @@ grid cell width: 10 height: 10 neighbors: 8 parallel: true{
 	
 	reflex count_population_heatmap when: vision = "heatmap" and !border and at_sea{
 		smoothed_population <- (population + sum(self.neighbors collect each.population))/(1+length(self.neighbors));
-		int index <- int(255*min(1.0,(3*smoothed_population/K)^0.6));
-		color <-  rgb(255-index, 255-index, 255);
+		int i <- int(255*min(1.0,(3*smoothed_population/K)^0.6));
+		color <-  rgb(255-i, 255-i, 255);
 	}
 }
 
@@ -335,7 +338,11 @@ species provinces {
 	rgb color <-#blue; 
 	
 	aspect base {
-		draw shape  color: color ;
+		if (type in ["land","coast"]){
+			draw shape translated_by (v_shift * 4) color: color ;
+		}else{
+			draw shape  color: color ;
+		}
 	}
 }
 
@@ -343,7 +350,7 @@ species port{
 	float r <- 0.1;
 	
 	aspect default {
-		draw circle(r) color: #white at: location;
+		draw circle(r) color: #white at: location + v_shift * 5;
 		//draw sea color: rgb(#green,0.15);
 	}
 }
@@ -363,14 +370,16 @@ species sardine skills: [moving] parallel: false{
 				stock <- stock/2;
 				create sardine{
 					self.stock <- myself.stock;
-					self.location <- any_location_in(inter(circle(2*radius,myself.location),sea));
+					self.location <- any_location_in(inter(circle(2*radius,myself.location), accessible_sea_area));
 				}
 			}	
 		}
 	}
 
 	reflex move {
-		do wander bounds: sea speed: 0.005 amplitude: 90.0;
+//		do wander() bounds: sea speed: 0.005 amplitude: 90.0;
+		do wander(bounds: accessible_sea_area, speed: 0.005, amplitude: 90.0);
+//		do wander()  speed: 100.0;
 	}
 
 		
@@ -379,15 +388,15 @@ species sardine skills: [moving] parallel: false{
 			match "fade" {
 				float tmp <- self distance_to(trawler closest_to self);
 				transparency <-(max(0,1-tmp/radius))^(1/8);
-				draw  circle(sqrt(stock/5000)) color: rgb(color,transparency);
+				draw (circle(sqrt(stock/5000)) inter world.shape) color: rgb(color,transparency) at: location + v_shift;
 			}
 			match "stock" {
-				float tmp <- self distance_to(trawler closest_to self);
-				draw  circle(sqrt(stock/5000)) color: color;
+//				float tmp <- self distance_to(trawler closest_to self);
+				draw (circle(sqrt(stock/5000)) inter world.shape) color: color at: location + v_shift;
 			}
 			match "sonar" {
 				loop t over: trawler{
-					draw  circle(sqrt(stock/5000)) inter circle(radius,t.location) color: color;	
+					draw (circle(sqrt(stock/5000)) inter t.sonar_coverage) translated_by (v_shift) color: color;
 				}
 			}
 		}
@@ -414,6 +423,7 @@ species boat skills: [moving] parallel: false{
 	point target;
 	point shift;
 	int delay <- rnd(100);
+	geometry sonar_coverage;
 	
 	init{
 		location <- any_location_in(union(port collect(each.shape)));			
@@ -427,9 +437,9 @@ species boat skills: [moving] parallel: false{
 	}
 	
 	reflex go_to_sea when: init{
-		do goto target: target;
+		do goto(target);
 		if self distance_to target < 0.01{
-			if sea overlaps self.location {
+			if accessible_sea_area overlaps self.location {
 				init <- false;
 				s <- one_of(sardine);
 			} else{
@@ -441,16 +451,16 @@ species boat skills: [moving] parallel: false{
 		
 	reflex move when: !init {
 		// closest_to self;
-		if mod(cycle,100)=delay{
+		if mod(cycle,100)=delay or shift = nil {
 			shift <- {(rnd(2.0)-1)*radius,(rnd(2.0)-1)*radius};
 		}
 		if s!=nil and !dead(s){
-			do goto target: s.location+shift speed: 0.05 on: sea;
+			do goto(s.location+shift) speed: 0.05 on: sea;
 		}else{
 			if !(boundaries overlaps self){
 				s <-sardine closest_to self;
 			}
-			do wander bounds: boundaries speed: 0.05 amplitude: amplitude;
+			do wander() bounds: boundaries speed: 0.05 amplitude: amplitude;
 		//	s <- one_of(sardine);
 			float search_radius <-3*radius;
 			list<sardine> sardines <- sardine at_distance search_radius;
@@ -471,6 +481,8 @@ species boat skills: [moving] parallel: false{
 		if (length(last_positions) > trail_length*2*dash) and (mod(length(last_positions),2*dash)=0) {
 			last_positions <- last(trail_length*2*dash,last_positions);
 		}
+		
+		sonar_coverage <- circle(radius,location) inter(world.shape);
 	}
 	
 	reflex fishing{
@@ -486,7 +498,7 @@ species boat skills: [moving] parallel: false{
 				sar.stock <- sar.stock - y;
 				current_effort <- current_effort - y;
 				if !dead(sar) and sar.stock <= 0{
-					ask sar {do die;}
+					ask sar {do die();}
 				}
 			} 
 		}
@@ -500,14 +512,14 @@ species boat skills: [moving] parallel: false{
 			}
 		}
 		if s != nil and (s distance_to self) < radius{
-		point line_vec <- (s.location-location)/8;
-		//int imax <- norm(line_vec)=0?0:min(6,floor(radius/norm(line_vec)));
-		loop i from: 0 to: 6 step: 2{
-			draw line([location+line_vec*i, location+line_vec*(i+1)]) color: sardine_color;
-		}
+			point line_vec <- (s.location-location)/8;
+			//int imax <- norm(line_vec)=0?0:min(6,floor(radius/norm(line_vec)));
+			loop i from: 0 to: 6 step: 2{
+				draw line([location+line_vec*i, location+line_vec*(i+1)]) color: sardine_color;
+			}
 		}
 		
-		draw circle(0.04) color: color ;
+		draw circle(0.04) translated_by (v_shift * 3) color: color;
 		//draw circle(0.04) color: #yellow at: target ;
 	}
 }
@@ -529,7 +541,7 @@ species trawler parent: boat parallel: false{
 	float effort <- 14.0;
 	float speed <- 0.1;
 	float amplitude <- 10.0;
-	geometry boundaries <- sea;
+	geometry boundaries <- accessible_sea_area;
 	float maintenance_cost <- 2.0;
 }
 
@@ -538,12 +550,7 @@ species sonar{
 	
 	aspect default{
 		if vision = "sonar"{
-			geometry g;
-			ask trawler{
-				g <- union(g,circle(radius,self.location));
-			}
-				//if species(self)=trawler{
-			draw inter(g,union(sea_provinces)) color: rgb(205,205,255,20);
+			draw union(trawler collect(each.sonar_coverage)) translated_by (v_shift * 2) color: rgb(205,205,255,20);
 		}
 	}
 }
